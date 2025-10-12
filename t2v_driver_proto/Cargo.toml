@@ -1,0 +1,10 @@
+[package]
+name = "t2v_driver_proto"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Felix Resch <felix.resch@tuwien.ac.at>"]
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+t2v_module = { path = "../t2v_module" }

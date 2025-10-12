@@ -1,0 +1,8 @@
+[workspace]
+resolver = "3"
+members = [
+    "t2v_driver",
+    "t2v_driver_cli",
+    "t2v_driver_proto",
+    "t2v_module",
+]

@@ -1,0 +1,14 @@
+[package]
+name = "t2v_module"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Felix Resch <felix.resch@tuwien.ac.at>"]
+
+[dependencies]
+async-std = { version = "1.13.2", features = ["tokio1"] }
+nusb = { version = "0.2.0", features = ["tokio"] }
+log = "0.4.27"
+tokio = { version = "1.47.1", features = ["io-util"] }
+futures-lite = "2.6.1"
+serde = { version = "1.0.228", features = ["derive"] }

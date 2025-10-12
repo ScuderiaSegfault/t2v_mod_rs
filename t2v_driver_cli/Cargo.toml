@@ -1,0 +1,13 @@
+[package]
+name = "t2v_driver_cli"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+authors = ["Felix Resch <felix.resch@tuwien.ac.at>"]
+
+[dependencies]
+log = "0.4.28"
+pretty_env_logger = "0.5.0"
+clap = { version = "4.5.48", features = ["derive", "color", "cargo"] }
+serde_json = "1.0.145"
+t2v_driver_proto = { path = "../t2v_driver_proto" }
