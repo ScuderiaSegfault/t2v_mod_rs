@@ -1,7 +1,7 @@
-use std::os::unix::net::UnixDatagram;
-use std::path::PathBuf;
 use clap::Parser;
 use log::debug;
+use std::os::unix::net::UnixDatagram;
+use std::path::PathBuf;
 use t2v_driver_proto::{Event, Request};
 
 #[derive(Debug, Parser)]
@@ -26,7 +26,6 @@ fn main() {
         driver_socket: args.driver_socket,
     };
     app.run();
-
 }
 
 struct App {
