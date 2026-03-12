@@ -1,0 +1,1 @@
+SUBSYSTEM=="usb", ATTR{idVendor}=="5455", ATTR{idProduct}=="1911", GROUP="group", OWNER="user"

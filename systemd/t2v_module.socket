@@ -1,0 +1,10 @@
+[Unit]
+Description=Socket for communicating with the T2V Module driver
+PartOf=t2v_module.service
+
+[Socket]
+ListenDatagram=/var/run/t2v_module.sock
+Group=users
+
+[Install]
+WantedBy=sockets.target

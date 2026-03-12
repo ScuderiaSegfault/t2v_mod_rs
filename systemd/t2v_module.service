@@ -1,0 +1,12 @@
+[Unit]
+Description=Userspace Driver for the RoboRacer T2V module
+After=t2v_module.socket
+Requires=t2v_module.socket
+
+[Service]
+Type=notify
+ExecStart=</path/to/bin/>/t2v_driver /dev/null
+Environment="SYSTEMD=true"
+
+[Install]
+WantedBy=multi-user.target

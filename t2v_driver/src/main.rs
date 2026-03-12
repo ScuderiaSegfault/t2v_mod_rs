@@ -1,6 +1,5 @@
-#![feature(let_chains)]
 #![warn(clippy::pedantic)]
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 #![forbid(clippy::unwrap_used)]
 #![forbid(clippy::expect_used)]
 mod error;
@@ -106,7 +105,11 @@ async fn setup_unit(args: &Args) -> (UnixDatagram, Box<dyn StatusNotifier>) {
         log::set_max_level(LevelFilter::Info);
         let raw_fd = sd_notify::listen_fds().unwrap().next().unwrap();
         (
-            unsafe { UnixDatagram::from_raw_fd(raw_fd) },
+            #[allow(unsafe_code)]
+            // no other way to reconstruct the unix datagram socket from a raw file descriptor
+            unsafe {
+                UnixDatagram::from_raw_fd(raw_fd)
+            },
             Box::new(SystemdNotifier) as Box<dyn StatusNotifier>,
         )
     } else {
