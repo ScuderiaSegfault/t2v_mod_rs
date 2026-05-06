@@ -301,10 +301,10 @@ impl TireHallSensorReader {
 /// Contains the time differences between readings per sensor in seconds.
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TireHallSensorReading {
-    sensor_0_tdiff: f32,
-    sensor_1_tdiff: f32,
-    sensor_2_tdiff: f32,
-    sensor_3_tdiff: f32,
+    pub sensor_0_tdiff: f32,
+    pub sensor_1_tdiff: f32,
+    pub sensor_2_tdiff: f32,
+    pub sensor_3_tdiff: f32,
 }
 
 #[cfg(test)]
