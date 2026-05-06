@@ -6,10 +6,8 @@ use futures::{SinkExt, pin_mut};
 use log::{debug, error, info, warn};
 use std::collections::HashSet;
 use std::os::unix::net::SocketAddr;
-use t2v_driver_proto::{Event, Request};
-use t2v_module::{Initial, IrNecFrame, T2VModule};
-use tokio::task;
 use t2v_driver_proto::{Event as T2VEvent, Request};
+use t2v_module::{Initial, IrNecFrame, T2VModule, TireHallSensorReading};
 use tokio::{select, task};
 
 pub async fn unit<S: Stream<Item = T2VModule<Initial>> + Unpin>(
@@ -24,29 +22,28 @@ pub async fn unit<S: Stream<Item = T2VModule<Initial>> + Unpin>(
     let (ir_sender, mut ir_receiver) = channel(16);
     let (sensors_sender, mut sensors_receiver) = channel(16);
 
-    let ir_nec_task = task::spawn(handle_device(device, sender.clone()));
     let ir_nec_task = task::spawn(handle_device(
         device,
         ir_sender.clone(),
+        sensors_sender.clone(),
     ));
     pin_mut!(ir_nec_task);
 
     let mut ir_nec_subscribers = HashSet::new();
+    let mut tire_hall_sensor_subscribers = HashSet::new();
 
     loop {
-        let handle_incoming = handle_incoming(socket);
-        pin_mut!(handle_incoming);
         enum Event {
             IncomingPacket(crate::Result<Option<(Request, SocketAddr)>>),
             IrFrame(Option<IrNecFrame>),
+            SensorReading(Option<TireHallSensorReading>),
             TaskExit(crate::Result<()>),
         }
 
-        let receive_frame = receiver.next();
-        pin_mut!(receive_frame);
         let event = select! {
             incoming = handle_incoming(socket) => Event::IncomingPacket(incoming),
             ir_frame = ir_receiver.next() => Event::IrFrame(ir_frame),
+            sensor_reading = sensors_receiver.next() => Event::SensorReading(sensor_reading),
             task_exit = &mut ir_nec_task => Event::TaskExit(task_exit?),
         };
 
@@ -60,6 +57,13 @@ pub async fn unit<S: Stream<Item = T2VModule<Initial>> + Unpin>(
                                 && enable
                             {
                                 ir_nec_subscribers.insert(path.to_path_buf());
+                            }
+                        }
+                        Request::ReceiveTireHallSensorReadings { enable } => {
+                            if let Some(path) = addr.as_pathname()
+                                && enable
+                            {
+                                tire_hall_sensor_subscribers.insert(path.to_path_buf());
                             }
                         }
                     },
@@ -83,7 +87,26 @@ pub async fn unit<S: Stream<Item = T2VModule<Initial>> + Unpin>(
                     }
                 }
             }
-            Either::Right((_, _)) => {
+            Event::SensorReading(sensor_reading) => {
+                if !ir_nec_subscribers.is_empty() {
+                    let data = serde_json::to_vec(&T2VEvent::TireHallSensorReading(
+                        sensor_reading.unwrap(),
+                    ))
+                    .unwrap();
+                    for tire_hall_sensor_subscriber in &tire_hall_sensor_subscribers {
+                        debug!(
+                            "sending event to: {}",
+                            tire_hall_sensor_subscriber.display()
+                        );
+                        if let Err(e) = socket.send_to(&data, tire_hall_sensor_subscriber).await {
+                            warn!(
+                                "error sending event to {}: {e}",
+                                tire_hall_sensor_subscriber.display()
+                            );
+                        };
+                    }
+                }
+            }
             Event::TaskExit(_result) => {
                 warn!("device closed, trying next one");
                 notifier.report_status("Reconnecting".into());
@@ -109,10 +132,10 @@ pub async fn unit<S: Stream<Item = T2VModule<Initial>> + Unpin>(
                         );
                     };
                 }
-                *ir_nec_task = task::spawn(handle_device(device, sender.clone()));
                 *ir_nec_task = task::spawn(handle_device(
                     device,
                     ir_sender.clone(),
+                    sensors_sender.clone(),
                 ));
             }
         }
@@ -177,24 +200,29 @@ pub async fn handle_device(
     };
 
     let mut ir_nec_reader = device.ir_nec_endpoint()?;
+    let mut tire_hall_sensor_reader = device.tire_hall_sensor_endpoint()?;
+
     let mut ir_finished = false;
+    let mut sensors_finished = false;
 
     loop {
-        match ir_nec_reader.next().await {
-            Ok(option) => match option {
         enum Event {
             Ir(Result<Option<IrNecFrame>, tokio::io::Error>),
+            Sensors(Result<Option<TireHallSensorReading>, tokio::io::Error>),
         }
         let event = select! {
             ir_frame = ir_nec_reader.next() => Event::Ir(ir_frame),
+            sensor_reading = tire_hall_sensor_reader.next() => Event::Sensors(sensor_reading),
         };
 
         match event {
             Event::Ir(Ok(option)) => match option {
                 None => {
-                    debug!("End of received messages");
-                    return Ok(());
                     debug!("End of IR frames");
+                    if sensors_finished {
+                        return Ok(());
+                    }
+                    ir_finished = true;
                 }
                 Some(frame) => {
                     info!("Received frame {frame:02x?}");
@@ -203,12 +231,27 @@ pub async fn handle_device(
                     }
                 }
             },
-            Err(e) => {
-                error!("Error while receiving messages {e:?}");
             Event::Ir(Err(e)) => {
                 error!("Error while receiving IR frames: {e:?}");
                 return Err(e.into());
             }
+            Event::Sensors(Ok(option)) => match option {
+                None => {
+                    debug!("End of IR frames");
+                    if ir_finished {
+                        return Ok(());
+                    }
+                    sensors_finished = true;
+                }
+                Some(sensor_reading) => {
+                    info!("Received frame {sensor_reading:?}");
+                    if let Err(e) = sensors_sender.send(sensor_reading).await {
+                        error!("failed to send sensor reading: {e}");
+                    }
+                }
+            },
+            Event::Sensors(Err(e)) => {
+                error!("Error while receiving sensor reading: {e:?}");
                 return Err(e.into());
             }
         }

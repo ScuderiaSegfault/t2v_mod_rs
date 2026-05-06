@@ -16,7 +16,7 @@ use async_std::stream::Stream;
 use futures_lite::StreamExt;
 use log::debug;
 use nusb::io::EndpointRead;
-use nusb::transfer::{In, Interrupt};
+use nusb::transfer::{Bulk, In, Interrupt};
 use nusb::{Device, DeviceInfo, Interface};
 use std::ops::Deref;
 use tokio::io::AsyncReadExt;
@@ -187,6 +187,19 @@ impl T2VModule<Claimed> {
         })
     }
 
+    /// Opens the endpoint dedicated to receiving Hall Sensor readings in an instance of [`TireHallSensorReader`](`TireHallSensorReader`).
+    ///
+    /// # Errors
+    ///
+    /// This method fails, if opening the endpoint fails. See [`Interface::endpoint`](nusb::Interface::endpoint) for more details.
+    pub fn tire_hall_sensor_endpoint(&self) -> Result<TireHallSensorReader, NUsbError> {
+        let endpoint = self.state.interface.endpoint::<Bulk, In>(0x82)?;
+        let endpoint_reader = endpoint.reader(32);
+        Ok(TireHallSensorReader {
+            endpoint: endpoint_reader,
+        })
+    }
+
     /// Release the interface and re-attach the kernel driver, if it was previously connected.
     #[must_use]
     pub fn release(self) -> T2VModule<Opened> {
@@ -252,6 +265,46 @@ impl IrNecFrame {
     pub fn command(&self) -> [u8; 2] {
         self.command
     }
+}
+
+/// Wrapper for reading Tire Hall Sensor readings from a USB endpoint.
+pub struct TireHallSensorReader {
+    endpoint: EndpointRead<Bulk>,
+}
+
+impl TireHallSensorReader {
+    /// Read the next Tire Hall Sensor reading from the USB endpoint.
+    ///
+    /// # Errors
+    ///
+    /// This method fails, if reading from the endpoint fails. See [`Endpoint::read`](nusb::Endpoint::read) for more details.
+    pub async fn next(&mut self) -> Result<Option<TireHallSensorReading>, io::Error> {
+        let mut data = [0u8; 32];
+        let len = self.endpoint.read(&mut data).await?;
+        debug_assert_eq!(len, 16, "Tire hall sensor data is always exactly 16 bytes");
+        debug!("read data: {:02x?}", &data[..16]);
+
+        let sensor_0 = u32::from_le_bytes([data[0], data[1], data[2], data[3]]);
+        let sensor_1 = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
+        let sensor_2 = u32::from_le_bytes([data[8], data[9], data[10], data[11]]);
+        let sensor_3 = u32::from_le_bytes([data[12], data[13], data[14], data[15]]);
+
+        Ok(Some(TireHallSensorReading {
+            sensor_0_tdiff: sensor_0 as f32 / 1e6,
+            sensor_1_tdiff: sensor_1 as f32 / 1e6,
+            sensor_2_tdiff: sensor_2 as f32 / 1e6,
+            sensor_3_tdiff: sensor_3 as f32 / 1e6,
+        }))
+    }
+}
+
+/// Contains the time differences between readings per sensor in seconds.
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TireHallSensorReading {
+    sensor_0_tdiff: f32,
+    sensor_1_tdiff: f32,
+    sensor_2_tdiff: f32,
+    sensor_3_tdiff: f32,
 }
 
 #[cfg(test)]
