@@ -225,7 +225,7 @@ pub async fn handle_device(
                     ir_finished = true;
                 }
                 Some(frame) => {
-                    info!("Received frame {frame:02x?}");
+                    debug!("Received frame {frame:02x?}");
                     if let Err(e) = ir_sender.send(frame).await {
                         error!("failed to send frame: {e}");
                     }
@@ -244,7 +244,7 @@ pub async fn handle_device(
                     sensors_finished = true;
                 }
                 Some(sensor_reading) => {
-                    info!("Received frame {sensor_reading:?}");
+                    debug!("Received frame {sensor_reading:?}");
                     if let Err(e) = sensors_sender.send(sensor_reading).await {
                         error!("failed to send sensor reading: {e}");
                     }
